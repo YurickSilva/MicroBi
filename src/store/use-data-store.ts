@@ -1,25 +1,32 @@
-// Placeholder for Zustand store
 import { create } from "zustand";
-import { ColumnMapping, NormalizedRecord, RawCSVRow } from "@/types/data";
 
-interface DataStoreState {
-  rawRows: RawCSVRow[];
-  headers: string[];
-  mapping: ColumnMapping | null;
-  records: NormalizedRecord[];
-  fileName: string | null;
-  setRawData: (rows: RawCSVRow[], headers: string[], fileName: string) => void;
-  setMappingAndRecords: (mapping: ColumnMapping, records: NormalizedRecord[]) => void;
-  reset: () => void;
+export interface DataRecord {
+  id: string;
+  date: string;       // Formato ISO YYYY-MM-DD
+  amount: number;     // Valor monetário
+  category: string;   // Categoria/Produto
+  raw: Record<string, any>;
 }
 
-export const useDataStore = create<DataStoreState>((set) => ({
-  rawRows: [],
-  headers: [],
-  mapping: null,
+interface DataStore {
+  records: DataRecord[];
+  fileName: string | null;
+  isLoading: boolean;
+  setRecords: (records: DataRecord[], fileName: string) => void;
+  clearRecords: () => void;
+  setLoading: (loading: boolean) => void;
+}
+
+export const useDataStore = create<DataStore>((set) => ({
   records: [],
   fileName: null,
-  setRawData: (rawRows, headers, fileName) => set({ rawRows, headers, fileName }),
-  setMappingAndRecords: (mapping, records) => set({ mapping, records }),
-  reset: () => set({ rawRows: [], headers: [], mapping: null, records: [], fileName: null }),
+  isLoading: false,
+
+  setRecords: (records, fileName) =>
+    set({ records, fileName, isLoading: false }),
+
+  clearRecords: () =>
+    set({ records: [], fileName: null, isLoading: false }),
+
+  setLoading: (isLoading) => set({ isLoading }),
 }));
