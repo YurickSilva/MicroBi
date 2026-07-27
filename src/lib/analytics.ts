@@ -1,4 +1,4 @@
-import { DataRecord } from "@/store/use-data-store";
+import { NormalizedRecord } from "@/types/data";
 
 export interface KPIMetrics {
   totalRevenue: number;
@@ -23,7 +23,7 @@ export interface CategoryData {
 /**
  * Calcula métricas gerais (KPIs)
  */
-export function calculateKPIs(records: DataRecord[]): KPIMetrics {
+export function calculateKPIs(records: NormalizedRecord[]): KPIMetrics {
   if (!records || records.length === 0) {
     return {
       totalRevenue: 0,
@@ -33,7 +33,7 @@ export function calculateKPIs(records: DataRecord[]): KPIMetrics {
     };
   }
 
-  const totalRevenue = records.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+  const totalRevenue = records.reduce((acc, curr) => acc + (curr.value || 0), 0);
   const totalSales = records.length;
   const averageTicket = totalSales > 0 ? totalRevenue / totalSales : 0;
 
@@ -51,7 +51,7 @@ export function calculateKPIs(records: DataRecord[]): KPIMetrics {
 /**
  * Agrupa faturamento por data para o gráfico temporal (Revenue Chart)
  */
-export function getRevenueOverTime(records: DataRecord[]): TimeSeriesData[] {
+export function getRevenueOverTime(records: NormalizedRecord[]): TimeSeriesData[] {
   if (!records || records.length === 0) return [];
 
   const map = new Map<string, { total: number; salesCount: number }>();
@@ -61,7 +61,7 @@ export function getRevenueOverTime(records: DataRecord[]): TimeSeriesData[] {
     const current = map.get(dateKey) || { total: 0, salesCount: 0 };
 
     map.set(dateKey, {
-      total: current.total + (record.amount || 0),
+      total: current.total + (record.value || 0),
       salesCount: current.salesCount + 1,
     });
   });
@@ -78,10 +78,10 @@ export function getRevenueOverTime(records: DataRecord[]): TimeSeriesData[] {
 /**
  * Agrupa faturamento por Categoria para o gráfico por Categoria (Category Chart)
  */
-export function getCategoryDistribution(records: DataRecord[]): CategoryData[] {
+export function getCategoryDistribution(records: NormalizedRecord[]): CategoryData[] {
   if (!records || records.length === 0) return [];
 
-  const totalRevenue = records.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+  const totalRevenue = records.reduce((acc, curr) => acc + (curr.value || 0), 0);
   const map = new Map<string, { total: number; salesCount: number }>();
 
   records.forEach((record) => {
@@ -89,7 +89,7 @@ export function getCategoryDistribution(records: DataRecord[]): CategoryData[] {
     const current = map.get(cat) || { total: 0, salesCount: 0 };
 
     map.set(cat, {
-      total: current.total + (record.amount || 0),
+      total: current.total + (record.value || 0),
       salesCount: current.salesCount + 1,
     });
   });

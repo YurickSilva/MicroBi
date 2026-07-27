@@ -2,11 +2,11 @@
 
 import React, { useState } from "react";
 import { Search } from "lucide-react";
-import { DataRecord } from "@/store/use-data-store";
+import { NormalizedRecord } from "@/types/data";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 
 interface DataTableProps {
-  records: DataRecord[];
+  records: NormalizedRecord[];
 }
 
 export function DataTable({ records }: DataTableProps) {
@@ -64,7 +64,7 @@ export function DataTable({ records }: DataTableProps) {
                   {record.category}
                 </td>
                 <td className="py-2.5 px-4 text-right font-semibold text-emerald-400">
-                  {formatCurrency(record.amount)}
+                  {formatCurrency(record.value)}
                 </td>
               </tr>
             ))}

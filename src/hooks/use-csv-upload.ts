@@ -1,71 +1,105 @@
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { useDataStore, DataRecord } from "@/store/use-data-store";
+import { useDataStore } from "@/store/use-data-store";
 import { parseCSVFile, parseCSVString } from "@/lib/parser";
+import { NormalizedRecord, RawCSVRow } from "@/types/data";
 
-export function useCsvUpload() {
-  const router = useRouter();
-  const setRecords = useDataStore((state) => state.setRecords);
-  const setLoadingStore = useDataStore((state) => state.setLoading);
+interface UseCsvUploadProps {
+  onSuccess?: () => void;
+}
 
+/**
+ * Normaliza linhas brutas do CSV em objetos NormalizedRecord tipados para o Dashboard
+ */
+function normalizeRawRows(rawRows: RawCSVRow[]): NormalizedRecord[] {
+  return rawRows.map((row, index) => {
+    const keys = Object.keys(row);
+
+    // Inferência inteligente de colunas essenciais ignorando maiúsculas/minúsculas
+    const dateKey = keys.find((k) => /data|date|dia|time/i.test(k)) || keys[0];
+    const valueKey = keys.find((k) => /valor|price|amount|total|revenue|preco|quant/i.test(k)) || keys[1];
+    const categoryKey = keys.find((k) => /categoria|category|produto|product|tipo|type|grupo/i.test(k)) || keys[2];
+
+    const rawDate = row[dateKey] || new Date().toISOString().split("T")[0];
+    const rawValue = row[valueKey];
+
+    // Conversão segura de valores monetários e numéricos (aceita R$, vírgulas e pontos)
+    let parsedValue = 0;
+    if (typeof rawValue === "number") {
+      parsedValue = rawValue;
+    } else if (typeof rawValue === "string") {
+      const cleaned = rawValue.replace(/[^\d,.-]/g, "").replace(",", ".");
+      parsedValue = parseFloat(cleaned) || 0;
+    }
+
+    const category = row[categoryKey] || "Geral";
+
+    return {
+      id: `record-${index}-${Math.random().toString(36).substring(2, 9)}`,
+      date: String(rawDate),
+      value: parsedValue,
+      category: String(category),
+      raw: row,
+    };
+  });
+}
+
+export function useCsvUpload({ onSuccess }: UseCsvUploadProps = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const setRecords = useDataStore((state) => state.setRecords);
 
-  // Processa arquivo CSV local do usuário
   const processFile = async (file: File) => {
     setIsLoading(true);
-    setLoadingStore(true);
     setError(null);
 
     try {
-      const parsed = await parseCSVFile(file);
-      
-      if (!parsed.data || parsed.data.length === 0) {
-        throw new Error("O arquivo CSV está vazio ou não possui registros válidos.");
+      const result = await parseCSVFile(file);
+
+      if (!result.data || result.data.length === 0) {
+        throw new Error("O arquivo CSV está vazio ou inválido.");
       }
 
-      setRecords(parsed.data as unknown as DataRecord[], file.name);
-      router.push("/dashboard");
+      const normalizedRecords = normalizeRawRows(result.data);
+      setRecords(normalizedRecords, file.name);
+      onSuccess?.();
     } catch (err: any) {
-      setError(err.message || "Erro ao processar o arquivo CSV.");
+      setError(err.message || "Erro desconhecido ao processar o arquivo.");
     } finally {
       setIsLoading(false);
-      setLoadingStore(false);
     }
   };
 
-  // Carrega o CSV sintético do Modo Demo
-  const processDemoFile = async () => {
+  const loadDemoData = async () => {
     setIsLoading(true);
-    setLoadingStore(true);
     setError(null);
 
     try {
       const response = await fetch("/demo/ecommerce-sample.csv");
+
       if (!response.ok) {
-        throw new Error("Não foi possível carregar o arquivo de demonstração.");
+        throw new Error("Não foi possível carregar os dados de demonstração.");
       }
 
       const csvText = await response.text();
-      const parsed = await parseCSVString(csvText);
+      const result = await parseCSVString(csvText);
 
-      if (!parsed.data || parsed.data.length === 0) {
+      if (!result.data || result.data.length === 0) {
         throw new Error("O arquivo de demonstração está vazio.");
       }
 
-      setRecords(parsed.data as unknown as DataRecord[], "ecommerce-sample.csv");
-      router.push("/dashboard");
+      const normalizedRecords = normalizeRawRows(result.data);
+      setRecords(normalizedRecords, "ecommerce-sample.csv (Demo)");
+      onSuccess?.();
     } catch (err: any) {
-      setError(err.message || "Erro ao carregar os dados de demonstração.");
+      setError(err.message || "Erro ao carregar o modo de demonstração.");
     } finally {
       setIsLoading(false);
-      setLoadingStore(false);
     }
   };
 
   return {
     processFile,
-    processDemoFile,
+    loadDemoData,
     isLoading,
     error,
   };

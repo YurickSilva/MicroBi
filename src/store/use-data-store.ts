@@ -1,18 +1,11 @@
 import { create } from "zustand";
-
-export interface DataRecord {
-  id: string;
-  date: string;       // Formato ISO YYYY-MM-DD
-  amount: number;     // Valor monetário
-  category: string;   // Categoria/Produto
-  raw: Record<string, any>;
-}
+import { NormalizedRecord } from "@/types/data";
 
 interface DataStore {
-  records: DataRecord[];
+  records: NormalizedRecord[];
   fileName: string | null;
   isLoading: boolean;
-  setRecords: (records: DataRecord[], fileName: string) => void;
+  setRecords: (records: NormalizedRecord[], fileName: string) => void;
   clearRecords: () => void;
   setLoading: (loading: boolean) => void;
 }

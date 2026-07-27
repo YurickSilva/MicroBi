@@ -1,139 +1,64 @@
 "use client";
 
 import React from "react";
-import Link from "next/link";
-import { PDFDownloadLink } from "@react-pdf/renderer";
-import { 
-  DollarSign, 
-  ShoppingBag, 
-  Receipt, 
-  Layers, 
-  Download, 
-  ArrowLeft, 
-  BarChart3,
-  RefreshCw
-} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { BarChart3, Play } from "lucide-react";
+import { Dropzone } from "@/components/upload/dropzone";
+import { useCsvUpload } from "@/hooks/use-csv-upload";
 
-import { useDashboardData } from "@/hooks/use-dashboard-data";
-import { useDataStore } from "@/store/use-data-store";
-import { KPICard } from "@/components/dashboard/kpi-card";
-import { RevenueChart } from "@/components/dashboard/revenue-chart";
-import { CategoryChart } from "@/components/dashboard/category-chart";
-import { DataTable } from "@/components/dashboard/data-table";
-import { EmptyState } from "@/components/feedback/empty-state";
-import { LoadingState } from "@/components/feedback/loading-state";
-import { ReportPDF } from "@/components/pdf/report-pdf";
-import { formatCurrency, formatNumber } from "@/lib/formatters";
-
-export default function DashboardPage() {
-  const { records, fileName, isLoading, kpis, revenueSeries, categoryDistribution, hasData } = useDashboardData();
-  const clearRecords = useDataStore((state) => state.clearRecords);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-zinc-950 p-6 sm:p-10">
-        <LoadingState />
-      </div>
-    );
-  }
-
-  if (!hasData) {
-    return (
-      <div className="min-h-screen bg-zinc-950 p-6 sm:p-10 flex items-center justify-center">
-        <EmptyState />
-      </div>
-    );
-  }
+export default function LandingPage() {
+  const router = useRouter();
+  
+  // O hook gerencia o estado de loading, erros e injeta os dados no Zustand
+  const { processFile, loadDemoData, isLoading, error } = useCsvUpload({
+    onSuccess: () => {
+      // Redireciona para o dashboard assim que o CSV for parseado com sucesso
+      router.push("/dashboard");
+    },
+  });
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Top Navbar / Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800/80">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              onClick={clearRecords}
-              className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors"
-              title="Trocar de arquivo"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-emerald-400" />
-                <h1 className="text-xl font-bold tracking-tight text-white">
-                  Dashboard de Desempenho
-                </h1>
-              </div>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Arquivo: <span className="text-zinc-200 font-mono">{fileName}</span> ({records.length} linhas)
-              </p>
-            </div>
+    <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
+      <div className="max-w-xl w-full space-y-8 text-center">
+        
+        {/* Header / Hero Section */}
+        <div className="space-y-4">
+          <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto border border-emerald-500/20">
+            <BarChart3 className="w-8 h-8 text-emerald-400" />
           </div>
-
-          <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              onClick={clearRecords}
-              className="py-2 px-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 font-medium text-xs flex items-center gap-1.5 transition-colors"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Novo Upload</span>
-            </Link>
-
-            {/* Exportar PDF Client-Side */}
-            <PDFDownloadLink
-              document={<ReportPDF fileName={fileName || "CSV"} kpis={kpis} categories={categoryDistribution} />}
-              fileName={`Relatorio-MicroBi-${fileName?.replace(".csv", "") || "export"}.pdf`}
-              className="py-2 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-xs flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/10"
-            >
-              {({ loading }) => (
-                <>
-                  <Download className="w-3.5 h-3.5" />
-                  <span>{loading ? "Gerando PDF..." : "Baixar Relatório PDF"}</span>
-                </>
-              )}
-            </PDFDownloadLink>
-          </div>
+          <h1 className="text-3xl sm:text-4xl font-bold text-zinc-100 tracking-tight">
+            MicroBi Analytics
+          </h1>
+          <p className="text-zinc-400 text-sm sm:text-base max-w-md mx-auto">
+            Transforme planilhas em inteligência executiva instantaneamente.
+            Processamento 100% no navegador, sem envio de dados para servidores.
+          </p>
         </div>
 
-        {/* Grid de KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard
-            title="Faturamento Total"
-            value={formatCurrency(kpis.totalRevenue)}
-            description="Soma total dos valores válidos"
-            icon={DollarSign}
-          />
-          <KPICard
-            title="Total de Vendas"
-            value={formatNumber(kpis.totalSales)}
-            description="Quantidade de transações"
-            icon={ShoppingBag}
-          />
-          <KPICard
-            title="Ticket Médio"
-            value={formatCurrency(kpis.averageTicket)}
-            description="Receita média por transação"
-            icon={Receipt}
-          />
-          <KPICard
-            title="Categorias"
-            value={formatNumber(kpis.totalCategories)}
-            description="Categorias ativas identificadas"
-            icon={Layers}
+        {/* Upload Área (Dropzone) */}
+        <div className="bg-zinc-900/50 border border-zinc-800 p-2 rounded-3xl shadow-xl shadow-black/20">
+          <Dropzone
+            onFileSelect={processFile}
+            isLoading={isLoading}
+            error={error}
           />
         </div>
 
-        {/* Grid de Gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <RevenueChart data={revenueSeries} />
-          <CategoryChart data={categoryDistribution} />
+        {/* Botão de Modo Demo */}
+        <div className="flex flex-col items-center gap-3 pt-4">
+          <span className="text-xs text-zinc-500 font-medium uppercase tracking-wider">
+            Ou teste sem arquivos
+          </span>
+          <button
+            onClick={loadDemoData}
+            disabled={isLoading}
+            className="py-2.5 px-6 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700 text-zinc-300 font-medium text-sm flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          >
+            <Play className="w-4 h-4 text-emerald-400" />
+            <span>{isLoading ? "Carregando Demo..." : "Carregar Dados de Exemplo"}</span>
+          </button>
         </div>
 
-        {/* Tabela de Dados Consolidados */}
-        <DataTable records={records} />
       </div>
     </div>
   );
