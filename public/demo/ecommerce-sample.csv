@@ -1,0 +1,51 @@
+data,valor,categoria,cliente,status
+2026-01-05,150.00,Eletrônicos,Cliente A,Concluído
+2026-01-06,299.90,Roupas,Cliente B,Concluído
+2026-01-07,89.90,Casa & Decoracao,Cliente C,Concluído
+2026-01-08,1250.00,Eletrônicos,Cliente D,Concluído
+2026-01-09,45.00,Livros,Cliente E,Concluído
+2026-01-10,199.00,Roupas,Cliente F,Concluído
+2026-01-11,350.50,Casa & Decoracao,Cliente G,Concluído
+2026-01-12,890.00,Eletrônicos,Cliente H,Concluído
+2026-01-13,120.00,Livros,Cliente I,Concluído
+2026-01-14,75.00,Roupas,Cliente J,Concluído
+2026-01-15,430.00,Eletrônicos,Cliente K,Concluído
+2026-01-16,210.00,Casa & Decoracao,Cliente L,Concluído
+2026-01-17,95.00,Livros,Cliente M,Concluído
+2026-01-18,180.00,Roupas,Cliente N,Concluído
+2026-01-19,1500.00,Eletrônicos,Cliente O,Concluído
+2026-01-20,60.00,Livros,Cliente P,Concluído
+2026-01-21,340.00,Casa & Decoracao,Cliente Q,Concluído
+2026-01-22,250.00,Roupas,Cliente R,Concluído
+2026-01-23,780.00,Eletrônicos,Cliente S,Concluído
+2026-01-24,110.00,Livros,Cliente T,Concluído
+2026-01-25,490.00,Casa & Decoracao,Cliente U,Concluído
+2026-01-26,320.00,Roupas,Cliente V,Concluído
+2026-01-27,2100.00,Eletrônicos,Cliente W,Concluído
+2026-01-28,135.00,Livros,Cliente X,Concluído
+2026-01-29,290.00,Casa & Decoracao,Cliente Y,Concluído
+2026-01-30,410.00,Roupas,Cliente Z,Concluído
+2026-02-01,650.00,Eletrônicos,Cliente AA,Concluído
+2026-02-02,85.00,Livros,Cliente AB,Concluído
+2026-02-03,175.00,Roupas,Cliente AC,Concluído
+2026-02-04,520.00,Casa & Decoracao,Cliente AD,Concluído
+2026-02-05,1890.00,Eletrônicos,Cliente AE,Concluído
+2026-02-06,99.90,Livros,Cliente AF,Concluído
+2026-02-07,310.00,Roupas,Cliente AG,Concluído
+2026-02-08,450.00,Casa & Decoracao,Cliente AH,Concluído
+2026-02-09,1120.00,Eletrônicos,Cliente AI,Concluído
+2026-02-10,140.00,Livros,Cliente AJ,Concluído
+2026-02-11,280.00,Roupas,Cliente AK,Concluído
+2026-02-12,390.00,Casa & Decoracao,Cliente AL,Concluído
+2026-02-13,940.00,Eletrônicos,Cliente AM,Concluído
+2026-02-14,70.00,Livros,Cliente AN,Concluído
+2026-02-15,460.00,Roupas,Cliente AO,Concluído
+2026-02-16,580.00,Casa & Decoracao,Cliente AP,Concluído
+2026-02-17,2300.00,Eletrônicos,Cliente AQ,Concluído
+2026-02-18,160.00,Livros,Cliente AR,Concluído
+2026-02-19,370.00,Roupas,Cliente AS,Concluído
+2026-02-20,620.00,Casa & Decoracao,Cliente AT,Concluído
+2026-02-21,1450.00,Eletrônicos,Cliente AU,Concluído
+2026-02-22,115.00,Livros,Cliente AV,Concluído
+2026-02-23,240.00,Roupas,Cliente AW,Concluído
+2026-02-24,810.00,Casa & Decoracao,Cliente AX,Concluído
