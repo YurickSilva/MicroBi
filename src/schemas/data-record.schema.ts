@@ -9,7 +9,7 @@ export const NormalizedRecordSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar no formato ISO YYYY-MM-DD"),
   value: z
-    .number({ invalid_type_error: "Valor deve ser um número válido" })
+    .number({ message: "Valor deve ser um número válido" })
     .nonnegative("Valor das vendas não pode ser negativo"),
   category: z
     .string()
