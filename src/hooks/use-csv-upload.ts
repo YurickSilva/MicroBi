@@ -8,40 +8,58 @@ interface UseCsvUploadProps {
   onSuccess?: () => void;
 }
 
-/**
- * Resultado da inferência de colunas, incluindo flag de confiança.
- * `isConfident = false` quando alguma coluna caiu no fallback posicional (keys[0/1/2]).
- */
 export interface InferenceResult {
   mapping: ColumnMapping;
   isConfident: boolean;
 }
 
+// ─── Limites de sanidade ──────────────────────────────────────────────────────
+
+/** Valor máximo aceitável por transação (R$ 1 bilhão). Acima disso → outlier/corrupto */
+const MAX_PLAUSIBLE_VALUE = 1_000_000_000;
+
+/** Se mais de X% das linhas forem inválidas, o CSV é considerado inutilizável */
+const MAX_INVALID_RATIO = 0.6;
+
+/** Número mínimo de registros válidos necessários para o dashboard fazer sentido */
+const MIN_VALID_RECORDS = 3;
+
+// ─── inferColumns ─────────────────────────────────────────────────────────────
+
 /**
- * Infere quais colunas correspondem a data, valor e categoria.
+ * Infere quais colunas correspondem a data, valor e categoria a partir dos cabeçalhos.
  * Retorna `isConfident: false` se qualquer coluna não foi encontrada por nome semântico
- * e caiu no fallback posicional — isso sinaliza que o ColumnMapper deve aparecer.
+ * e caiu no fallback posicional — isso aciona o ColumnMapper.
  */
 export function inferColumns(headers: string[]): InferenceResult {
-  // Normaliza header para comparação: remove acentos, minúsculas
   const normalize = (s: string) =>
     s
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+      .replace(/[\u0300-\u036f]/g, "")
+      // Remove underscores e hífens para melhorar a correspondência (ex: "dt_venda" → "dtvenda")
+      .replace(/[_\-\s]+/g, "");
 
-  const DATE_TERMS = /^(data|date|created_at|dia|timestamp|dt|order_date)$/;
-  const VALUE_TERMS = /^(valor|price|total|faturamento|amount|revenue|receita|preco|preco_total|gross|net|sale_value)$/;
-  const CATEGORY_TERMS = /^(categoria|category|produto|product|type|tipo|grupo|group|item|segment)$/;
+  // Termos aceitos para cada coluna. Estratégia: substring/prefixo, não apenas igualdade exata.
+  const matchDate = (h: string) =>
+    /^(data|date|created|dia|timestamp|quando|dt|order.*date|venda.*data|data.*venda)/.test(
+      normalize(h)
+    );
 
-  const find = (pattern: RegExp) =>
-    headers.find((h) => pattern.test(normalize(h)));
+  const matchValue = (h: string) =>
+    /^(valor|price|total|faturamento|amount|revenue|receita|preco|gross|net|sale|vlr|vl|pago|paid)/.test(
+      normalize(h)
+    );
 
-  const dateKey = find(DATE_TERMS);
-  const valueKey = find(VALUE_TERMS);
-  const categoryKey = find(CATEGORY_TERMS);
+  const matchCategory = (h: string) =>
+    /^(categoria|category|produto|product|type|tipo|grupo|group|item|segment|sku|classe)/.test(
+      normalize(h)
+    );
 
-  // Calcula confiança: toda coluna encontrada semanticamente → confiante
+  const dateKey = headers.find((h) => matchDate(h));
+  const valueKey = headers.find((h) => matchValue(h));
+  const categoryKey = headers.find((h) => matchCategory(h));
+
   const isConfident = Boolean(dateKey && valueKey && categoryKey);
 
   return {
@@ -54,35 +72,56 @@ export function inferColumns(headers: string[]): InferenceResult {
   };
 }
 
+// ─── parseNumericValue ────────────────────────────────────────────────────────
+
 /**
- * Converte string de número no formato brasileiro (ponto = milhar, vírgula = decimal)
- * ou americano (vírgula = milhar, ponto = decimal) para float.
+ * Converte string de número nos formatos BR (ponto=milhar, vírgula=decimal)
+ * ou US (vírgula=milhar, ponto=decimal) para float.
+ *
+ * Retorna `null` quando o campo está vazio ou é texto puro não numérico
+ * (ex: "grátis", "abc123") — o chamador decide como tratar.
  *
  * Exemplos:
- *   "1.250,50" → 1250.50  (BR)
  *   "R$ 1.250,50" → 1250.50  (BR com símbolo)
- *   "1,250.50" → 1250.50  (US)
- *   "150.00" → 150.00
- *   "150,00" → 150.00  (BR sem milhar)
+ *   "1,250.50"    → 1250.50  (US)
+ *   "150,50"      → 150.50   (BR sem milhar)
+ *   "150.00"      → 150.00
+ *   "grátis"      → null     (texto não numérico)
+ *   ""            → null     (campo vazio)
  */
-function parseNumericValue(rawValue: unknown): number {
-  if (typeof rawValue === "number") return isNaN(rawValue) ? 0 : rawValue;
-  if (typeof rawValue !== "string") return 0;
+export function parseNumericValue(rawValue: unknown): number | null {
+  if (rawValue === null || rawValue === undefined) return null;
 
-  // Remove tudo que não seja dígito, vírgula ou ponto
-  const stripped = rawValue.replace(/[^\d,.]/g, "");
-  if (!stripped) return 0;
+  if (typeof rawValue === "number") {
+    return isNaN(rawValue) ? null : rawValue;
+  }
+
+  if (typeof rawValue !== "string") return null;
+
+  const trimmed = rawValue.trim();
+  if (!trimmed) return null; // campo vazio
+
+  // Remove símbolos monetários, espaços, letras isoladas e caracteres não relevantes
+  const stripped = trimmed.replace(/[^\d,.-]/g, "");
+  if (!stripped || stripped === "." || stripped === ",") return null;
+
+  // Se o que sobrou ainda contiver letras (ex: "abc123" → depois de strip fica "123")
+  // precisamos verificar se o original tinha uma parte numérica dominante.
+  // Heurística: se >50% dos chars originais (sem espaços) eram não-numéricos, é texto inválido.
+  const numericChars = trimmed.replace(/[^0-9]/g, "").length;
+  const totalNonSpace = trimmed.replace(/\s/g, "").length;
+  if (totalNonSpace > 0 && numericChars / totalNonSpace < 0.5) {
+    // Maioria é texto (ex: "grátis", "abc123")
+    return null;
+  }
 
   const hasComma = stripped.includes(",");
   const hasDot = stripped.includes(".");
-
   let normalized: string;
 
   if (hasComma && hasDot) {
-    // Verifica qual vem por último para determinar o separador decimal
     const lastComma = stripped.lastIndexOf(",");
     const lastDot = stripped.lastIndexOf(".");
-
     if (lastComma > lastDot) {
       // Formato BR: "1.250,50" → remove pontos, troca vírgula por ponto
       normalized = stripped.replace(/\./g, "").replace(",", ".");
@@ -91,72 +130,171 @@ function parseNumericValue(rawValue: unknown): number {
       normalized = stripped.replace(/,/g, "");
     }
   } else if (hasComma && !hasDot) {
-    // Pode ser "1250,50" (BR decimal) ou "1,250" (US milhar)
     const parts = stripped.split(",");
     if (parts.length === 2 && parts[1].length <= 2) {
-      // Provavelmente decimal BR: "150,50" ou "1250,50"
+      // Decimal BR: "150,50"
       normalized = stripped.replace(",", ".");
     } else {
-      // Provavelmente milhar US: "1,250" → remover vírgula
+      // Milhar US: "1,250"
       normalized = stripped.replace(/,/g, "");
     }
   } else {
-    // Só ponto, assume separador decimal americano/padrão
     normalized = stripped;
   }
 
   const parsed = parseFloat(normalized);
-  return isNaN(parsed) ? 0 : parsed;
+  return isNaN(parsed) ? null : parsed;
 }
 
+// ─── parseDateToISO ───────────────────────────────────────────────────────────
+
 /**
- * Converte uma string de data nos formatos DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
- * para o formato ISO YYYY-MM-DD exigido pelo schema Zod.
+ * Converte strings de data em vários formatos para ISO YYYY-MM-DD.
+ * Retorna `null` para strings claramente inválidas ou datas impossíveis (ex: 31/02, 2026-13-40).
  */
-function parseDateToISO(rawDate: unknown): string {
-  if (!rawDate) return "";
+export function parseDateToISO(rawDate: unknown): string | null {
+  if (!rawDate) return null;
   const s = String(rawDate).trim();
 
-  // Já está no formato ISO
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  // Strings obviamente não-data
+  if (!s || /^(n\/a|nd|sem data|null|undefined|-)$/i.test(s)) return null;
 
-  // Formato DD/MM/YYYY ou DD-MM-YYYY
-  const dmyMatch = s.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/);
-  if (dmyMatch) {
-    const [, d, m, y] = dmyMatch;
-    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  let year: number, month: number, day: number;
+
+  // Formato ISO: YYYY-MM-DD
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    year = parseInt(isoMatch[1]);
+    month = parseInt(isoMatch[2]);
+    day = parseInt(isoMatch[3]);
+  } else {
+    // Formato DD/MM/YYYY ou DD-MM-YYYY
+    const dmyMatch = s.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/);
+    if (dmyMatch) {
+      day = parseInt(dmyMatch[1]);
+      month = parseInt(dmyMatch[2]);
+      year = parseInt(dmyMatch[3]);
+    } else {
+      return null;
+    }
   }
 
-  // Formato ISO completo com horário
-  const isoDate = new Date(s);
-  if (!isNaN(isoDate.getTime())) {
-    return isoDate.toISOString().substring(0, 10);
+  // Validação de faixas básicas
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+  if (year < 1900 || year > 2100) return null;
+
+  // Validação de dias por mês (inclui fevereiro com ano bissexto)
+  const daysInMonth = new Date(year, month, 0).getDate();
+  if (day > daysInMonth) return null;
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+// ─── validateCSVStructure ─────────────────────────────────────────────────────
+
+/**
+ * Verifica a estrutura mínima do CSV antes de processar.
+ * Retorna um array de erros fatais que impedem o uso do arquivo.
+ * Se retornar lista vazia, o arquivo pode ser processado.
+ */
+export function validateCSVStructure(
+  rows: RawCSVRow[],
+  headers: string[]
+): string[] {
+  const fatais: string[] = [];
+
+  if (headers.length === 0) {
+    fatais.push("O arquivo não contém cabeçalhos de coluna.");
+    return fatais;
   }
 
-  return s; // Retorna o original; o schema Zod vai rejeitar se inválido
+  if (headers.length === 1) {
+    fatais.push(
+      `O arquivo parece usar um separador diferente de vírgula (","). ` +
+        `Encontramos apenas 1 coluna chamada "${headers[0]}". ` +
+        `Se seu arquivo usa ponto e vírgula (";") como separador, salve-o com separador de vírgula no Excel ` +
+        `(Arquivo → Salvar Como → CSV UTF-8) e tente novamente.`
+    );
+    return fatais;
+  }
+
+  if (rows.length === 0) {
+    fatais.push("O arquivo contém cabeçalhos, mas não possui nenhuma linha de dados.");
+    return fatais;
+  }
+
+  return fatais;
+}
+
+// ─── normalizeAndValidateRows ─────────────────────────────────────────────────
+
+export interface NormalizeResult {
+  records: NormalizedRecord[];
+  rejectedCount: number;
+  errors: string[];
+  /** Erros fatais que tornam o CSV inutilizável (ex: taxa de rejeição muito alta) */
+  fatalError: string | null;
 }
 
 /**
- * Normaliza linhas brutas do CSV em objetos NormalizedRecord.
- * Valida cada registro com Zod: inválidos são descartados e reportados.
+ * Normaliza linhas brutas do CSV em NormalizedRecords válidos.
+ * Aplica validação Zod em cada registro.
+ * Retorna `fatalError` quando a qualidade geral é insuficiente para gerar analytics.
  */
 export function normalizeAndValidateRows(
   rawRows: RawCSVRow[],
   mapping: ColumnMapping
-): { records: NormalizedRecord[]; rejectedCount: number; errors: string[] } {
+): NormalizeResult {
   const records: NormalizedRecord[] = [];
   const errors: string[] = [];
+  const outlierRows: number[] = [];
 
   rawRows.forEach((row, index) => {
     const rawDate = row[mapping.dateKey];
     const rawValue = row[mapping.valueKey];
     const rawCategory = row[mapping.categoryKey];
+    const lineNum = index + 2; // +2 porque linha 1 é o cabeçalho
 
+    // ── Data ──────────────────────────────────────────────────────────────────
+    const parsedDate = parseDateToISO(rawDate);
+    if (!parsedDate) {
+      errors.push(
+        `Linha ${lineNum}: data inválida ou impossível ("${rawDate}") — linha descartada.`
+      );
+      return;
+    }
+
+    // ── Valor ─────────────────────────────────────────────────────────────────
+    const parsedValue = parseNumericValue(rawValue);
+
+    if (parsedValue === null) {
+      const displayVal = rawValue === "" || rawValue === null || rawValue === undefined
+        ? "(campo vazio)"
+        : `"${rawValue}"`;
+      errors.push(
+        `Linha ${lineNum}: valor ${displayVal} não é numérico — linha descartada.`
+      );
+      return;
+    }
+
+    if (parsedValue > MAX_PLAUSIBLE_VALUE) {
+      outlierRows.push(lineNum);
+      errors.push(
+        `Linha ${lineNum}: valor ${parsedValue.toLocaleString("pt-BR")} excede R$ 1 bilhão — provável erro de formatação, linha descartada.`
+      );
+      return;
+    }
+
+    // ── Categoria ─────────────────────────────────────────────────────────────
+    const category = String(rawCategory ?? "Geral").trim() || "Geral";
+
+    // ── Schema Zod ────────────────────────────────────────────────────────────
     const candidate = {
       id: `rec-${index}-${Math.random().toString(36).substring(2, 8)}`,
-      date: parseDateToISO(rawDate),
-      value: parseNumericValue(rawValue),
-      category: String(rawCategory ?? "Geral").trim() || "Geral",
+      date: parsedDate,
+      value: parsedValue,
+      category,
       raw: row as Record<string, unknown>,
     };
 
@@ -166,17 +304,57 @@ export function normalizeAndValidateRows(
       records.push(result.data as NormalizedRecord);
     } else {
       const issues = result.error.issues.map((i) => i.message).join("; ");
-      errors.push(`Linha ${index + 1}: ${issues}`);
+      errors.push(`Linha ${lineNum} (schema): ${issues} — linha descartada.`);
     }
   });
 
-  return { records, rejectedCount: errors.length, errors };
+  // ── Verificação de qualidade geral ────────────────────────────────────────
+
+  const totalLines = rawRows.length;
+  const rejectedCount = errors.length;
+  const rejectionRate = totalLines > 0 ? rejectedCount / totalLines : 1;
+
+  let fatalError: string | null = null;
+
+  if (records.length === 0) {
+    // Tenta dar a mensagem mais útil possível
+    const dateErrors = errors.filter((e) => e.includes("data inválida")).length;
+    const valueErrors = errors.filter((e) => e.includes("não é numérico") || e.includes("campo vazio")).length;
+
+    if (dateErrors > totalLines * 0.5) {
+      fatalError =
+        `Nenhum registro válido. ${dateErrors} de ${totalLines} linhas têm datas inválidas ou impossíveis. ` +
+        `Verifique o formato da coluna de data (esperado: YYYY-MM-DD ou DD/MM/YYYY).`;
+    } else if (valueErrors > totalLines * 0.5) {
+      fatalError =
+        `Nenhum registro válido. ${valueErrors} de ${totalLines} linhas têm valores não numéricos ou vazios. ` +
+        `Verifique se a coluna de valor contém números (ex: 150.50 ou R$ 1.250,00).`;
+    } else {
+      fatalError =
+        `Nenhum registro pôde ser processado. Erros:\n` +
+        errors.slice(0, 5).join("\n") +
+        (errors.length > 5 ? `\n... e mais ${errors.length - 5} erros.` : "");
+    }
+  } else if (rejectionRate > MAX_INVALID_RATIO) {
+    fatalError =
+      `${Math.round(rejectionRate * 100)}% das linhas (${rejectedCount} de ${totalLines}) foram rejeitadas por dados inválidos. ` +
+      `O arquivo tem qualidade insuficiente para gerar analytics confiáveis. ` +
+      `Revise as colunas de data e valor e tente novamente.`;
+  } else if (records.length < MIN_VALID_RECORDS) {
+    fatalError =
+      `Apenas ${records.length} registro(s) válido(s) encontrado(s). ` +
+      `São necessários ao menos ${MIN_VALID_RECORDS} registros para gerar o dashboard.`;
+  }
+
+  return { records, rejectedCount, errors, fatalError };
 }
+
+// ─── useCsvUpload hook ────────────────────────────────────────────────────────
 
 export function useCsvUpload({ onSuccess }: UseCsvUploadProps = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Quando `needsMapping = true`, o ColumnMapper deve ser exibido
+  const [validationWarning, setValidationWarning] = useState<string | null>(null);
   const [needsMapping, setNeedsMapping] = useState(false);
   const [pendingRows, setPendingRows] = useState<RawCSVRow[]>([]);
   const [pendingHeaders, setPendingHeaders] = useState<string[]>([]);
@@ -184,27 +362,27 @@ export function useCsvUpload({ onSuccess }: UseCsvUploadProps = {}) {
   const setRecords = useDataStore((state) => state.setRecords);
 
   /**
-   * Executa a normalização com o mapeamento confirmado (pelo usuário ou por inferência confiante)
+   * Executa a normalização com o mapeamento confirmado.
+   * Lança erro se o resultado for inutilizável (fatalError).
+   * Seta warning se houve rejeições parciais.
    */
   const applyMapping = (
     rows: RawCSVRow[],
     mapping: ColumnMapping,
     fileName: string
   ) => {
-    const { records, rejectedCount, errors } = normalizeAndValidateRows(rows, mapping);
+    setValidationWarning(null);
 
-    if (records.length === 0) {
-      const detail = errors.slice(0, 3).join(" | ");
-      throw new Error(
-        `Nenhum registro válido encontrado após validação.${detail ? ` Detalhes: ${detail}` : ""}`
-      );
+    const { records, rejectedCount, fatalError } = normalizeAndValidateRows(rows, mapping);
+
+    if (fatalError) {
+      throw new Error(fatalError);
     }
 
     if (rejectedCount > 0) {
-      // Continua mas avisa no console — em produção poderia expor no UI
-      console.warn(
-        `[MicroBi] ${rejectedCount} registro(s) rejeitado(s) pela validação Zod:\n`,
-        errors.slice(0, 5).join("\n")
+      setValidationWarning(
+        `${rejectedCount} linha(s) com dados inválidos foram ignoradas. ` +
+          `Processamos ${records.length} registros válidos.`
       );
     }
 
@@ -212,9 +390,6 @@ export function useCsvUpload({ onSuccess }: UseCsvUploadProps = {}) {
     onSuccess?.();
   };
 
-  /**
-   * Callback chamado pelo ColumnMapper quando o usuário confirma o mapeamento manual
-   */
   const onMappingConfirmed = (manualMapping: {
     dateKey: string;
     amountKey: string;
@@ -240,25 +415,24 @@ export function useCsvUpload({ onSuccess }: UseCsvUploadProps = {}) {
     }
   };
 
-  /**
-   * Processa um arquivo CSV carregado pelo usuário via Dropzone
-   */
   const processFile = async (file: File) => {
     setIsLoading(true);
     setError(null);
     setNeedsMapping(false);
+    setValidationWarning(null);
 
     try {
       const result = await parseCSVFile(file);
 
-      if (!result.data || result.data.length === 0) {
-        throw new Error("O arquivo CSV está vazio ou não contém dados válidos.");
+      // ── Validação estrutural (erros fatais de formato) ──────────────────────
+      const structureErrors = validateCSVStructure(result.data, result.headers);
+      if (structureErrors.length > 0) {
+        throw new Error(structureErrors[0]);
       }
 
       const { mapping, isConfident } = inferColumns(result.headers);
 
       if (!isConfident) {
-        // Guarda o estado pendente e solicita mapeamento manual
         setPendingRows(result.data);
         setPendingHeaders(result.headers);
         setPendingFileName(file.name);
@@ -275,13 +449,11 @@ export function useCsvUpload({ onSuccess }: UseCsvUploadProps = {}) {
     }
   };
 
-  /**
-   * Carrega os dados do CSV de demonstração em /public/demo/
-   */
   const loadDemoData = async () => {
     setIsLoading(true);
     setError(null);
     setNeedsMapping(false);
+    setValidationWarning(null);
 
     try {
       const response = await fetch("/demo/ecommerce-sample.csv");
@@ -293,12 +465,12 @@ export function useCsvUpload({ onSuccess }: UseCsvUploadProps = {}) {
       const csvText = await response.text();
       const result = await parseCSVString(csvText);
 
-      if (!result.data || result.data.length === 0) {
-        throw new Error("O arquivo de demonstração está vazio.");
+      const structureErrors = validateCSVStructure(result.data, result.headers);
+      if (structureErrors.length > 0) {
+        throw new Error(structureErrors[0]);
       }
 
       const { mapping } = inferColumns(result.headers);
-      // Demo sempre tem colunas conhecidas — aplicar diretamente
       applyMapping(result.data, mapping, "ecommerce-sample.csv (Demo)");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erro ao carregar o modo de demonstração.");
@@ -313,6 +485,7 @@ export function useCsvUpload({ onSuccess }: UseCsvUploadProps = {}) {
     onMappingConfirmed,
     isLoading,
     error,
+    validationWarning,
     needsMapping,
     pendingHeaders,
   };
