@@ -3,15 +3,15 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { PDFDownloadLink } from "@react-pdf/renderer";
-import { 
-  DollarSign, 
-  ShoppingBag, 
-  Receipt, 
-  Layers, 
-  Download, 
-  ArrowLeft, 
+import {
+  DollarSign,
+  ShoppingBag,
+  Receipt,
+  Layers,
+  Download,
+  ArrowLeft,
   BarChart3,
-  RefreshCw
+  RefreshCw,
 } from "lucide-react";
 
 import { useDashboardData } from "@/hooks/use-dashboard-data";
@@ -20,13 +20,25 @@ import { KPICard } from "@/components/dashboard/kpi-card";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { CategoryChart } from "@/components/dashboard/category-chart";
 import { DataTable } from "@/components/dashboard/data-table";
+import { DateRangeFilter } from "@/components/dashboard/date-range-filter";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { ReportPDF } from "@/components/pdf/report-pdf";
 import { formatCurrency, formatNumber } from "@/lib/formatters";
 
 export default function DashboardPage() {
-  const { records, fileName, isLoading, kpis, revenueSeries, categoryDistribution, hasData } = useDashboardData();
+  const {
+    records,
+    totalRecordsCount,
+    fileName,
+    isLoading,
+    kpis,
+    revenueSeries,
+    categoryDistribution,
+    hasData,
+    hasFilteredResults,
+  } = useDashboardData();
+
   const clearRecords = useDataStore((state) => state.clearRecords);
 
   // Evita inconsistência de SSR/Hydration com o @react-pdf/renderer
@@ -73,7 +85,8 @@ export default function DashboardPage() {
                 </h1>
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                Fonte: <span className="text-zinc-200 font-mono">{fileName}</span> ({records.length} registros)
+                Fonte: <span className="text-zinc-200 font-mono">{fileName}</span>{" "}
+                ({records.length} de {totalRecordsCount} registros)
               </p>
             </div>
           </div>
@@ -106,6 +119,9 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Filtro de Período (Crossfilter global da página) */}
+        <DateRangeFilter />
+
         {/* Métricas Principais (KPIs) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
@@ -133,6 +149,15 @@ export default function DashboardPage() {
             icon={Layers}
           />
         </div>
+
+        {/* Aviso quando o filtro atual não retorna nenhum registro */}
+        {!hasFilteredResults && (
+          <div className="flex items-center gap-2.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-center justify-center">
+            <p className="text-sm text-zinc-400">
+              Nenhum registro encontrado para o período selecionado. Tente ajustar o filtro de data acima.
+            </p>
+          </div>
+        )}
 
         {/* Gráficos Interativos */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
