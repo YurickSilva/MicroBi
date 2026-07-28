@@ -16,6 +16,7 @@ export default function LandingPage() {
     onMappingConfirmed,
     isLoading,
     error,
+    validationWarning,
     needsMapping,
     pendingHeaders,
   } = useCsvUpload({
@@ -59,6 +60,14 @@ export default function LandingPage() {
               isLoading={isLoading}
               error={error}
             />
+          </div>
+        )}
+
+        {/* Banner de aviso parcial — algumas linhas foram descartadas mas o arquivo foi aceito */}
+        {validationWarning && !error && (
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-950/40 border border-amber-800/40 text-left">
+            <span className="text-amber-400 text-base leading-none mt-0.5">⚠</span>
+            <p className="text-xs text-amber-300/90 leading-relaxed">{validationWarning}</p>
           </div>
         )}
 
