@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BarChart3, Play } from "lucide-react";
 import { Dropzone } from "@/components/upload/dropzone";
 import { ColumnMapper } from "@/components/upload/column-mapper";
+import { HowToUseDialog } from "@/components/upload/how-to-use-dialog";
 import { useCsvUpload } from "@/hooks/use-csv-upload";
 
 export default function LandingPage() {
@@ -34,13 +35,23 @@ export default function LandingPage() {
           <div className="w-16 h-16 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto border border-emerald-500/20">
             <BarChart3 className="w-8 h-8 text-emerald-400" />
           </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-zinc-100 tracking-tight">
-            MicroBi Analytics
+
+          <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">
+            MicroBi Financeiro
           </h1>
-          <p className="text-zinc-400 text-sm sm:text-base max-w-md mx-auto">
-            Transforme planilhas em inteligência executiva instantaneamente.
-            Processamento 100% no navegador, sem envio de dados para servidores.
-          </p>
+
+          <div className="max-w-lg mx-auto space-y-2 px-2">
+            <p className="text-base sm:text-lg font-medium text-zinc-300">
+              Transforme planilhas em inteligência financeira.
+            </p>
+            <p className="text-xs sm:text-sm text-zinc-500 leading-relaxed">
+              Os dados são lidos, exibidos e descartados direto na sua máquina. Sem servidores externos e sem banco de dados seus dados estão seguros.
+            </p>
+          </div>
+
+          <div className="flex justify-center pt-1">
+            <HowToUseDialog />
+          </div>
         </div>
 
         {/*

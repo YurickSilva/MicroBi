@@ -7,14 +7,34 @@ import { Calendar } from "@/components/ui/calendar";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/**
+ * Converte uma string "YYYY-MM-DD" em um Date no horário LOCAL (meia-noite local),
+ * em vez de UTC. Evita o bug clássico onde `new Date("2025-12-30")` é interpretado
+ * como UTC e "volta" um dia ao ser exibido em fusos negativos (ex: Brasil, UTC-3).
+ */
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+/**
+ * Converte um Date (horário local) de volta para "YYYY-MM-DD", sem passar por UTC.
+ */
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function dateToDayIndex(date: string, min: string): number {
-  return Math.floor((new Date(date).getTime() - new Date(min).getTime()) / 86400000);
+  return Math.floor((parseLocalDate(date).getTime() - parseLocalDate(min).getTime()) / 86400000);
 }
 
 function dayIndexToDate(index: number, min: string): string {
-  const d = new Date(min);
+  const d = parseLocalDate(min);
   d.setDate(d.getDate() + index);
-  return d.toISOString().split("T")[0];
+  return formatLocalDate(d);
 }
 
 export function DateRangeFilter() {
@@ -41,14 +61,12 @@ export function DateRangeFilter() {
 
   function handleStartDateChange(date: Date | undefined) {
     if (!date) return;
-    const newStart = date.toISOString().split("T")[0];
-    setDateRangeFilter([newStart, currentRange[1]]);
+    setDateRangeFilter([formatLocalDate(date), currentRange[1]]);
   }
 
   function handleEndDateChange(date: Date | undefined) {
     if (!date) return;
-    const newEnd = date.toISOString().split("T")[0];
-    setDateRangeFilter([currentRange[0], newEnd]);
+    setDateRangeFilter([currentRange[0], formatLocalDate(date)]);
   }
 
   return (
@@ -80,11 +98,13 @@ export function DateRangeFilter() {
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0">
             <Calendar
+              key={currentRange[0]}
               mode="single"
-              selected={new Date(currentRange[0])}
+              selected={parseLocalDate(currentRange[0])}
+              defaultMonth={parseLocalDate(currentRange[0])}
               onSelect={handleStartDateChange}
               disabled={(date) =>
-                date < new Date(min) || date > new Date(currentRange[1])
+                date < parseLocalDate(min) || date > parseLocalDate(currentRange[1])
               }
             />
           </PopoverContent>
@@ -100,11 +120,13 @@ export function DateRangeFilter() {
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0">
             <Calendar
+              key={currentRange[1]}
               mode="single"
-              selected={new Date(currentRange[1])}
+              selected={parseLocalDate(currentRange[1])}
+              defaultMonth={parseLocalDate(currentRange[1])}
               onSelect={handleEndDateChange}
               disabled={(date) =>
-                date > new Date(max) || date < new Date(currentRange[0])
+                date > parseLocalDate(max) || date < parseLocalDate(currentRange[0])
               }
             />
           </PopoverContent>

@@ -12,6 +12,12 @@ import {
   ArrowLeft,
   BarChart3,
   RefreshCw,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  CalendarCheck,
+  Activity,
+  PieChart,
 } from "lucide-react";
 
 import { useDashboardData } from "@/hooks/use-dashboard-data";
@@ -21,10 +27,13 @@ import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { CategoryChart } from "@/components/dashboard/category-chart";
 import { DataTable } from "@/components/dashboard/data-table";
 import { DateRangeFilter } from "@/components/dashboard/date-range-filter";
+import { DayOfWeekChart } from "@/components/dashboard/day-of-week-chart";
+import { ParetoChart } from "@/components/dashboard/pareto-chart";
+import { ComparisonChart } from "@/components/dashboard/comparison-chart";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { LoadingState } from "@/components/feedback/loading-state";
 import { ReportPDF } from "@/components/pdf/report-pdf";
-import { formatCurrency, formatNumber } from "@/lib/formatters";
+import { formatCurrency, formatNumber, formatDate, formatPercent } from "@/lib/formatters";
 
 export default function DashboardPage() {
   const {
@@ -37,11 +46,17 @@ export default function DashboardPage() {
     categoryDistribution,
     hasData,
     hasFilteredResults,
+    bestDay,
+    avgSalesPerDay,
+    topConcentration,
+    growth,
+    dayOfWeekDistribution,
+    paretoDistribution,
+    comparisonSeries,
   } = useDashboardData();
 
   const clearRecords = useDataStore((state) => state.clearRecords);
 
-  // Evita inconsistência de SSR/Hydration com o @react-pdf/renderer
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
     setIsClient(true);
@@ -62,6 +77,19 @@ export default function DashboardPage() {
       </div>
     );
   }
+
+  const growthIcon =
+    growth?.direction === "up" ? TrendingUp : growth?.direction === "down" ? TrendingDown : Minus;
+
+  const growthValue =
+    growth?.growthPercentage === null || growth?.growthPercentage === undefined
+      ? "—"
+      : `${growth.growthPercentage > 0 ? "+" : ""}${growth.growthPercentage.toFixed(1)}%`;
+
+  const growthDescription =
+    growth?.direction === "unknown"
+      ? "Sem dados do período anterior"
+      : "vs. período anterior equivalente";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 p-4 sm:p-8">
@@ -101,10 +129,20 @@ export default function DashboardPage() {
               <span>Novo Upload</span>
             </Link>
 
-            {/* Exportar PDF no Client */}
             {isClient && (
               <PDFDownloadLink
-                document={<ReportPDF fileName={fileName || "CSV"} kpis={kpis} categories={categoryDistribution} />}
+                document={
+                  <ReportPDF
+                    fileName={fileName || "CSV"}
+                    kpis={kpis}
+                    categories={categoryDistribution}
+                    growth={growth}
+                    bestDay={bestDay}
+                    avgSalesPerDay={avgSalesPerDay}
+                    topConcentration={topConcentration}
+                    dayOfWeekDistribution={dayOfWeekDistribution}
+                  />
+                }
                 fileName={`Relatorio-MicroBi-${fileName?.replace(".csv", "") || "export"}.pdf`}
                 className="py-2 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-xs flex items-center gap-2 transition-all shadow-lg shadow-emerald-500/10"
               >
@@ -119,7 +157,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Filtro de Período (Crossfilter global da página) */}
+        {/* Filtro de Período */}
         <DateRangeFilter />
 
         {/* Métricas Principais (KPIs) */}
@@ -150,7 +188,38 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Aviso quando o filtro atual não retorna nenhum registro */}
+        {/* KPIs Avançados */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KPICard
+            title="Crescimento"
+            value={growthValue}
+            description={growthDescription}
+            icon={growthIcon}
+          />
+          <KPICard
+            title="Melhor Dia"
+            value={bestDay ? formatDate(bestDay.date) : "—"}
+            description={bestDay ? `${formatCurrency(bestDay.total)} em vendas` : "Sem dados"}
+            icon={CalendarCheck}
+          />
+          <KPICard
+            title="Vendas / Dia"
+            value={avgSalesPerDay.toFixed(1)}
+            description="Média de transações por dia ativo"
+            icon={Activity}
+          />
+          <KPICard
+            title="Concentração Top 3"
+            value={formatPercent(topConcentration.percentage)}
+            description={
+              topConcentration.categories.length > 0
+                ? topConcentration.categories.join(", ")
+                : "Sem categorias"
+            }
+            icon={PieChart}
+          />
+        </div>
+
         {!hasFilteredResults && (
           <div className="flex items-center gap-2.5 p-4 rounded-xl bg-zinc-900/60 border border-zinc-800/80 text-center justify-center">
             <p className="text-sm text-zinc-400">
@@ -159,10 +228,32 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Gráficos Interativos */}
+        {/* Gráficos Principais */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <RevenueChart data={revenueSeries} />
           <CategoryChart data={categoryDistribution} />
+        </div>
+
+        
+        <div className="pt-2">
+          {/* Análises Avançadas 
+          <div className="flex items-center gap-2 mb-4">
+            <div className="h-px flex-1 bg-zinc-800/80" />
+            <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+              Análises Avançadas
+            </h2>
+            <div className="h-px flex-1 bg-zinc-800/80" />
+          </div>
+          */}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DayOfWeekChart data={dayOfWeekDistribution} />
+            <ParetoChart data={paretoDistribution} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 mt-6">
+            <ComparisonChart data={comparisonSeries} />
+          </div>
         </div>
 
         {/* Tabela de Transações */}

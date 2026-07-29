@@ -1,7 +1,7 @@
 import React from "react";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import { KPIMetrics, CategoryData } from "@/lib/analytics";
-import { formatCurrency, formatPercent } from "@/lib/formatters";
+import { KPIMetrics, CategoryData, GrowthMetrics, BestDayData, TopConcentration, DayOfWeekData } from "@/lib/analytics";
+import { formatCurrency, formatPercent, formatDate } from "@/lib/formatters";
 
 const styles = StyleSheet.create({
   page: {
@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   kpiGrid: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: 15,
+    marginBottom: 10,
   },
   kpiCard: {
     flex: 1,
@@ -55,6 +55,11 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#09090b",
     marginTop: 4,
+  },
+  kpiSubValue: {
+    fontSize: 7,
+    color: "#a1a1aa",
+    marginTop: 2,
   },
   table: {
     width: "100%",
@@ -82,6 +87,13 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: "#27272a",
   },
+  twoColumnRow: {
+    flexDirection: "row",
+    gap: 15,
+  },
+  twoColumnHalf: {
+    flex: 1,
+  },
   footer: {
     position: "absolute",
     bottom: 25,
@@ -101,9 +113,33 @@ interface ReportPDFProps {
   fileName: string;
   kpis: KPIMetrics;
   categories: CategoryData[];
+  growth?: GrowthMetrics | null;
+  bestDay?: BestDayData | null;
+  avgSalesPerDay?: number;
+  topConcentration?: TopConcentration;
+  dayOfWeekDistribution?: DayOfWeekData[];
 }
 
-export function ReportPDF({ fileName, kpis, categories }: ReportPDFProps) {
+export function ReportPDF({
+  fileName,
+  kpis,
+  categories,
+  growth,
+  bestDay,
+  avgSalesPerDay,
+  topConcentration,
+  dayOfWeekDistribution,
+}: ReportPDFProps) {
+  const growthLabel =
+    growth && growth.growthPercentage !== null
+      ? `${growth.growthPercentage > 0 ? "+" : ""}${growth.growthPercentage.toFixed(1)}%`
+      : "—";
+
+  const growthSubLabel =
+    growth && growth.growthPercentage !== null
+      ? "vs. período anterior"
+      : "sem dados anteriores";
+
   return (
     <Document>
       <Page size="A4" style={styles.page}>
@@ -115,7 +151,7 @@ export function ReportPDF({ fileName, kpis, categories }: ReportPDFProps) {
           </Text>
         </View>
 
-        {/* Resumo de KPIs */}
+        {/* Resumo de KPIs — Principais */}
         <Text style={styles.sectionTitle}>Métricas Principais</Text>
         <View style={styles.kpiGrid}>
           <View style={styles.kpiCard}>
@@ -132,26 +168,88 @@ export function ReportPDF({ fileName, kpis, categories }: ReportPDFProps) {
           </View>
         </View>
 
-        {/* Tabela de Categorias */}
-        <Text style={styles.sectionTitle}>Desempenho por Categoria</Text>
-        <View style={styles.table}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.tableHeaderCell, { width: "50%" }]}>Categoria</Text>
-            <Text style={[styles.tableHeaderCell, { width: "25%", textAlign: "right" }]}>Receita</Text>
-            <Text style={[styles.tableHeaderCell, { width: "25%", textAlign: "right" }]}>Share</Text>
+        {/* Resumo de KPIs — Avançados */}
+        <View style={styles.kpiGrid}>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Crescimento</Text>
+            <Text style={styles.kpiValue}>{growthLabel}</Text>
+            <Text style={styles.kpiSubValue}>{growthSubLabel}</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Melhor Dia</Text>
+            <Text style={styles.kpiValue}>{bestDay ? formatDate(bestDay.date) : "—"}</Text>
+            <Text style={styles.kpiSubValue}>
+              {bestDay ? formatCurrency(bestDay.total) : "sem dados"}
+            </Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Vendas / Dia</Text>
+            <Text style={styles.kpiValue}>{(avgSalesPerDay ?? 0).toFixed(1)}</Text>
+            <Text style={styles.kpiSubValue}>média de transações</Text>
+          </View>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>Concentração Top 3</Text>
+            <Text style={styles.kpiValue}>
+              {formatPercent(topConcentration?.percentage ?? 0)}
+            </Text>
+            <Text style={styles.kpiSubValue}>
+              {topConcentration?.categories.join(", ") || "sem dados"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.twoColumnRow}>
+          {/* Tabela de Categorias */}
+          <View style={styles.twoColumnHalf}>
+            <Text style={styles.sectionTitle}>Desempenho por Categoria</Text>
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.tableHeaderCell, { width: "50%" }]}>Categoria</Text>
+                <Text style={[styles.tableHeaderCell, { width: "25%", textAlign: "right" }]}>
+                  Receita
+                </Text>
+                <Text style={[styles.tableHeaderCell, { width: "25%", textAlign: "right" }]}>
+                  Share
+                </Text>
+              </View>
+
+              {categories.slice(0, 8).map((cat, idx) => (
+                <View key={idx} style={styles.tableRow}>
+                  <Text style={[styles.tableCell, { width: "50%" }]}>{cat.category}</Text>
+                  <Text style={[styles.tableCell, { width: "25%", textAlign: "right" }]}>
+                    {formatCurrency(cat.total)}
+                  </Text>
+                  <Text style={[styles.tableCell, { width: "25%", textAlign: "right" }]}>
+                    {formatPercent(cat.percentage)}
+                  </Text>
+                </View>
+              ))}
+            </View>
           </View>
 
-          {categories.slice(0, 10).map((cat, idx) => (
-            <View key={idx} style={styles.tableRow}>
-              <Text style={[styles.tableCell, { width: "50%" }]}>{cat.category}</Text>
-              <Text style={[styles.tableCell, { width: "25%", textAlign: "right" }]}>
-                {formatCurrency(cat.total)}
-              </Text>
-              <Text style={[styles.tableCell, { width: "25%", textAlign: "right" }]}>
-                {formatPercent(cat.percentage)}
-              </Text>
+          {/* Tabela de Padrão Semanal */}
+          {dayOfWeekDistribution && dayOfWeekDistribution.length > 0 && (
+            <View style={styles.twoColumnHalf}>
+              <Text style={styles.sectionTitle}>Padrão Semanal</Text>
+              <View style={styles.table}>
+                <View style={styles.tableHeader}>
+                  <Text style={[styles.tableHeaderCell, { width: "50%" }]}>Dia</Text>
+                  <Text style={[styles.tableHeaderCell, { width: "50%", textAlign: "right" }]}>
+                    Receita
+                  </Text>
+                </View>
+
+                {dayOfWeekDistribution.map((d, idx) => (
+                  <View key={idx} style={styles.tableRow}>
+                    <Text style={[styles.tableCell, { width: "50%" }]}>{d.day}</Text>
+                    <Text style={[styles.tableCell, { width: "50%", textAlign: "right" }]}>
+                      {formatCurrency(d.total)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          ))}
+          )}
         </View>
 
         {/* Rodapé */}
